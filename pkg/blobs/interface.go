@@ -18,7 +18,7 @@ type GetPostDelete interface {
 
 type Getter interface {
 	GetF(context.Context, ID, func(Blob) error) error
-	Exists(context.Context, ID) (bool, error)
+	Exists
 }
 
 type Poster interface {
@@ -29,9 +29,18 @@ type Deleter interface {
 	Delete(context.Context, ID) error
 }
 
+type Exists interface {
+	Exists(context.Context, ID) (bool, error)
+}
+
 type Lister interface {
 	// List fills ids with all the IDs under that prefix
 	List(ctx context.Context, prefix []byte, ids []ID) (n int, err error)
+}
+
+type Set interface {
+	Exists
+	Lister
 }
 
 var (

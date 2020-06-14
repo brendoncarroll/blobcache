@@ -17,16 +17,23 @@ import (
 
 type API interface {
 	// PinSets
+	// CreatePinSet creates a new pinset. if err == nil PinSetID will be > 0
 	CreatePinSet(ctx context.Context, name string) (PinSetID, error)
 	DeletePinSet(ctx context.Context, pinset PinSetID) error
 	GetPinSet(ctx context.Context, pinset PinSetID) (*PinSet, error)
+	// Pin adds mh to the pinset.  If mh is already in the pinset err == nil
 	Pin(ctx context.Context, pinset PinSetID, mh []byte) error
+	// Unpin removes mh from the pinset. if mh is not in the pinset err == nil
 	Unpin(ctx context.Context, pinset PinSetID, mh []byte) error
 
 	// Blobs
+	// Post calculates the hash of data, adds it to the pinset and persists the data.
+	// if pinset == 0 the data will be posted to the cache, and there are no persistence gaurentees.
+	// len(data) <= MaxBlobSize()
 	Post(ctx context.Context, pinset PinSetID, data []byte) ([]byte, error)
+	// GetF calls f with data that hashes to mh or returns an error. Errors from f will be returned.
 	GetF(ctx context.Context, mh []byte, f func([]byte) error) error
-
+	// MaxBlobSize is the maximum size of a single blob.
 	MaxBlobSize() int
 }
 
@@ -133,11 +140,17 @@ func (n *Node) GetF(ctx context.Context, mh []byte, fn func([]byte) error) error
 
 func (n *Node) Post(ctx context.Context, pinset PinSetID, data []byte) ([]byte, error) {
 	id := blobs.Hash(data)
+	mh := encodeMH(id)
+	if pinset == 0 {
+		if err := n.ephemeral.Bucket("blobs").Put(id[:], data); err != nil {
+			return nil, err
+		}
+		return mh, nil
+	}
+
 	if err := n.pinSets.Pin(ctx, pinset, id); err != nil {
 		return nil, err
 	}
-	mh := encodeMH(id)
-
 	// don't persist data if it is in an external source
 	for _, s := range n.extSources {
 		exists, err := s.Exists(ctx, id)

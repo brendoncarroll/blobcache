@@ -54,3 +54,19 @@ message GetRes {
         GetReq redirect = 3;
     }
 }
+
+message Promise {
+    Terms terms = 1; 
+    bytes maker_id = 2;
+    bytes maker_pem = 3;
+    bytes taker_id = 4;
+    bytes taker_pem = 5;
+}
+
+message Terms {
+    bytes root = 1;
+    int64 start_time = 2;
+    int64 end_time = 3;
+    map<string, int64> per_second = 3;
+    map<string, int64> on_failure = 4;
+}
