@@ -22,9 +22,9 @@ type OneHopPull struct {
 	peerSwarm peers.PeerSwarm
 	local     blobs.Getter
 
-	mu      sync.RWMutex
-	seq     int
-	allowed map[int]func(context.Context, blobs.ID) bool
+	mu    sync.RWMutex
+	seq   int
+	rules map[int]func(context.Context, p2p.PeerID, blobs.ID) bool
 }
 
 func NewOneHopPull(params Params) *OneHopPull {
@@ -32,7 +32,7 @@ func NewOneHopPull(params Params) *OneHopPull {
 		peerSwarm: params.PeerSwarm,
 		local:     params.Local,
 
-		allowed: make(map[int]func(context.Context, blobs.ID) bool),
+		rules: make(map[int]func(context.Context, p2p.PeerID, blobs.ID) bool),
 	}
 	ohp.peerSwarm.OnAsk(ohp.handleAsk)
 	return ohp
@@ -59,27 +59,29 @@ func (ohp *OneHopPull) Pull(ctx context.Context, pid p2p.PeerID, bid blobs.ID) (
 	return ohp.peerSwarm.AskPeer(ctx, pid, bid[:])
 }
 
-func (ohp *OneHopPull) AddSet(f func(context.Context, blobs.ID) bool) int {
+func (ohp *OneHopPull) AddRule(peerID p2p.PeerID, f func(context.Context, blobs.ID) bool) int {
 	ohp.mu.Lock()
 	defer ohp.mu.Unlock()
 	x := ohp.seq
 	ohp.seq++
 
-	ohp.allowed[x] = f
+	ohp.rules[x] = func(ctx context.context, xpeer p2p.PeerID, xblob blobs.ID) bool {
+		return xpeer.Equals(peerID) && f(ctx, xblob)
+	}
 	return x
 }
 
-func (ohp *OneHopPull) DropSet(x int) {
+func (ohp *OneHopPull) DropRule(x int) {
 	ohp.mu.Lock()
 	defer ohp.mu.Unlock()
-	delete(ohp.allowed, x)
+	delete(ohp.rules, x)
 }
 
-func (ohp *OneHopPull) isAllowed(ctx context.Context, id blobs.ID) bool {
+func (ohp *OneHopPull) isAllowed(ctx context.Context, peerID p2p.PeerID, blobID blobs.ID) bool {
 	ohp.mu.RLock()
 	defer ohp.mu.RUnlock()
-	for _, f := range ohp.allowed {
-		if f(ctx, id) {
+	for _, f := range ohp.rules {
+		if f(ctx, peerID, blobID) {
 			return true
 		}
 	}
