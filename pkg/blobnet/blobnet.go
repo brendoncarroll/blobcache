@@ -8,11 +8,11 @@ import (
 	"github.com/jonboulle/clockwork"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/brendoncarroll/blobcache/pkg/bcstate"
-	"github.com/brendoncarroll/blobcache/pkg/blobnet/blobrouting"
-	"github.com/brendoncarroll/blobcache/pkg/blobnet/peerrouting"
-	"github.com/brendoncarroll/blobcache/pkg/blobnet/peers"
-	"github.com/brendoncarroll/blobcache/pkg/blobs"
+	"github.com/blobcache/blobcache/pkg/bcstate"
+	"github.com/blobcache/blobcache/pkg/blobnet/blobrouting"
+	"github.com/blobcache/blobcache/pkg/blobnet/peerrouting"
+	"github.com/blobcache/blobcache/pkg/blobnet/peers"
+	"github.com/blobcache/blobcache/pkg/blobs"
 )
 
 const (
@@ -60,7 +60,7 @@ func NewBlobNet(params Params) *Blobnet {
 	bn.blobRouter = blobrouting.NewRouter(blobrouting.RouterParams{
 		PeerSwarm:  peers.NewPeerSwarm(brSwarm.(p2p.SecureAskSwarm), params.PeerStore),
 		PeerRouter: bn.peerRouter,
-		DB:         bcstate.PrefixedDB{Prefix: "blob-router", DB: params.DB},
+		DB:         bcstate.PrefixedDB{Prefix: "blob_router", DB: params.DB},
 		Clock:      params.Clock,
 	})
 
@@ -98,11 +98,11 @@ func (bn *Blobnet) Close() error {
 }
 
 func (bn *Blobnet) HaveLocally(ctx context.Context, id blobs.ID) error {
-	return bn.blobRouter.Invalidate(ctx, id)
+	return nil
 }
 
 func (bn *Blobnet) GoneLocally(ctx context.Context, id blobs.ID) error {
-	return bn.blobRouter.Invalidate(ctx, id)
+	return nil
 }
 
 func (bn *Blobnet) GetF(ctx context.Context, id blobs.ID, f func([]byte) error) error {

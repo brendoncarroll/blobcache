@@ -5,11 +5,11 @@ import (
 	"errors"
 	"io"
 
-	"github.com/brendoncarroll/blobcache/pkg/blobnet/bcproto"
-	"github.com/brendoncarroll/blobcache/pkg/blobnet/blobrouting"
-	"github.com/brendoncarroll/blobcache/pkg/blobnet/peerrouting"
-	"github.com/brendoncarroll/blobcache/pkg/blobnet/peers"
-	"github.com/brendoncarroll/blobcache/pkg/blobs"
+	"github.com/blobcache/blobcache/pkg/blobnet/bcproto"
+	"github.com/blobcache/blobcache/pkg/blobnet/blobrouting"
+	"github.com/blobcache/blobcache/pkg/blobnet/peerrouting"
+	"github.com/blobcache/blobcache/pkg/blobnet/peers"
+	"github.com/blobcache/blobcache/pkg/blobs"
 	"github.com/brendoncarroll/go-p2p"
 	proto "github.com/golang/protobuf/proto"
 	log "github.com/sirupsen/logrus"
@@ -70,9 +70,9 @@ func (f *Fetcher) get(ctx context.Context, id blobs.ID, redirect *GetReq, n int)
 		req.RoutingTag = rt2
 		nextHop = nh
 	} else {
-		peers := f.blobRouter.Lookup(ctx, id)
-		if len(peers) > 0 {
-			req.RoutingTag, nextHop = f.peerRouter.Lookup(peers[0])
+		entries := f.blobRouter.Lookup(ctx, id)
+		if len(entries) > 0 {
+			req.RoutingTag, nextHop = f.peerRouter.Lookup(entries[0].PeerID)
 			req.Found = true
 		} else {
 			id := f.peerRouter.Closest(id[:])
