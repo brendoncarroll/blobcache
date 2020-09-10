@@ -5,8 +5,8 @@ import (
 	"io"
 	"sync"
 
-	"github.com/brendoncarroll/blobcache/pkg/blobnet/peers"
-	"github.com/brendoncarroll/blobcache/pkg/blobs"
+	"github.com/blobcache/blobcache/pkg/blobnet/peers"
+	"github.com/blobcache/blobcache/pkg/blobs"
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/jonboulle/clockwork"
 	log "github.com/sirupsen/logrus"

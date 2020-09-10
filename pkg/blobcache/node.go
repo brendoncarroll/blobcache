@@ -120,12 +120,11 @@ func (n *Node) GetF(ctx context.Context, id blobs.ID, fn func([]byte) error) err
 
 func (n *Node) Post(ctx context.Context, pinset PinSetID, data []byte) (blobs.ID, error) {
 	id := blobs.Hash(data)
-	mh := encodeMH(id)
 	if pinset == 0 {
 		if err := n.ephemeral.Bucket("blobs").Put(id[:], data); err != nil {
-			return nil, err
+			return blobs.ID{}, err
 		}
-		return mh, nil
+		return id, nil
 	}
 
 	if err := n.pinSets.Pin(ctx, pinset, id); err != nil {

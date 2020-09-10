@@ -3,9 +3,9 @@ package persist
 import (
 	"context"
 
-	"github.com/brendoncarroll/blobcache/pkg/bcstate"
-	"github.com/brendoncarroll/blobcache/pkg/blobs"
-	"github.com/brendoncarroll/blobcache/pkg/tries"
+	"github.com/blobcache/blobcache/pkg/bcstate"
+	"github.com/blobcache/blobcache/pkg/blobs"
+	"github.com/blobcache/blobcache/pkg/tries"
 	"github.com/brendoncarroll/go-p2p"
 )
 
