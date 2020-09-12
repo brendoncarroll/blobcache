@@ -2,6 +2,7 @@ package persist
 
 import (
 	"context"
+	"sort"
 
 	"github.com/blobcache/blobcache/pkg/bcstate"
 	"github.com/blobcache/blobcache/pkg/blobs"
@@ -21,7 +22,7 @@ type Placer struct {
 	store    blobs.Store
 	replicas int
 
-	compareCosts func(a, b p2p.PeerID) bool
+	compareCosts func(id blobs.ID, a, b p2p.PeerID) bool
 	getCapacity  func(p2p.PeerID) uint64
 }
 
@@ -81,6 +82,9 @@ func (p *Placer) MakePlan(ctx context.Context, peers []p2p.PeerID, set blobs.Set
 }
 
 func (p *Placer) place(ctx context.Context, loads map[p2p.PeerID]uint64, peers []p2p.PeerID, id blobs.ID, cb func(p2p.PeerID) error) error {
+	sort.Slice(peers, func(i, j int) bool {
+		return p.compareCosts(id, peers[i], peers[j])
+	})
 	replicas := 0
 	for _, peerID := range peers {
 		load := loads[peerID]

@@ -12,6 +12,10 @@ type TrieSet struct {
 	root  blobs.ID
 }
 
+func newTrieSet(store blobs.Store, root blobs.ID) *TrieSet {
+	return &TrieSet{store: store, root: root}
+}
+
 func (t *TrieSet) Exists(ctx context.Context, id blobs.ID) (bool, error) {
 	_, err := tries.Get(ctx, t.store, t.root, id[:])
 	if err != nil {

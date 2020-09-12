@@ -2,8 +2,10 @@ package tries
 
 import (
 	"context"
+	sync "sync"
 
 	"github.com/blobcache/blobcache/pkg/blobs"
+	"golang.org/x/sync/errgroup"
 )
 
 func Sync(ctx context.Context, src blobs.Getter, dst blobs.Store, root blobs.ID) error {
@@ -34,13 +36,23 @@ func walkRefs(ctx context.Context, s blobs.Getter, root blobs.ID, fn func(id blo
 		return err
 	}
 	if IsParent(n) {
+		group, ctx := errgroup.WithContext(ctx)
+		mu := sync.Mutex{}
 		for i := range n.Children {
-			if len(n.Children) == 0 {
+			i := i
+			if len(n.Children[i]) == 0 {
 				continue
 			}
-			if err := walkRefs(ctx, s, blobs.IDFromBytes(n.Children[i]), fn); err != nil {
-				return err
-			}
+			group.Go(func() error {
+				return walkRefs(ctx, s, blobs.IDFromBytes(n.Children[i]), func(id blobs.ID) error {
+					mu.Lock()
+					defer mu.Unlock()
+					return fn(id)
+				})
+			})
+		}
+		if err := group.Wait(); err != nil {
+			return err
 		}
 	}
 	return fn(root)

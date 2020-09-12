@@ -1,6 +1,7 @@
 package persist
 
 import (
+	"bytes"
 	"context"
 	"sync"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/blobcache/blobcache/pkg/blobs"
 	"github.com/blobcache/blobcache/pkg/tries"
 	"github.com/brendoncarroll/go-p2p"
+	"github.com/brendoncarroll/go-p2p/p/kademlia"
 )
 
 type Params struct {
@@ -38,6 +40,24 @@ type Service struct {
 }
 
 func NewService(params Params) *Service {
+	placer := &Placer{
+		store:    params.MetadataStore,
+		replicas: 2,
+		compareCosts: func(id blobs.ID, a, b p2p.PeerID) bool {
+			if a.Equals(params.LocalID) {
+				return true
+			}
+			if b.Equals(params.LocalID) {
+				return false
+			}
+			distA := kademlia.XORBytes(id[:], a[:])
+			distB := kademlia.XORBytes(id[:], b[:])
+			return bytes.Compare(distA, distB) < 0
+		},
+		getCapacity: func(peerID p2p.PeerID) uint64 {
+			return 1e3
+		},
+	}
 	return &Service{
 		localSet: params.LocalSet,
 
@@ -45,25 +65,27 @@ func NewService(params Params) *Service {
 		metadataStore: params.MetadataStore,
 
 		puller: params.OneHopPull,
+		placer: placer,
 	}
 }
 
 func (s *Service) run(ctx context.Context) {
-	placer := &Placer{store: s.metadataStore}
+
 }
 
-func (s *Service) Persist(ctx context.Context, peerID p2p.PeerID) (bcproto.Promise, error) {
-	return nil
+func (s *Service) Persist(ctx context.Context, peerID p2p.PeerID) (*bcproto.Promise, error) {
+	return nil, nil
 }
 
 func (s *Service) pullTrie(ctx context.Context, peerID p2p.PeerID, root blobs.ID) error {
 	s.gcLock.RLock()
 	src := s.puller.Getter(peerID)
 	if err := tries.Sync(ctx, src, s.metadataStore, root); err != nil {
-		s.gcLock.Unlock()
+		s.gcLock.RUnlock()
 		return err
 	}
-	ts := &TrieSet{store: s.metadataStore}
+	s.gcLock.RUnlock()
+	ts := &TrieSet{store: s.metadataStore, root: root}
 	return blobs.ForEach(ctx, ts, func(id blobs.ID) error {
 		return blobs.Copy(ctx, src, s.dataStore, id)
 	})
