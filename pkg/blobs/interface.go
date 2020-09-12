@@ -45,5 +45,5 @@ type Set interface {
 
 var (
 	ErrTooMany  = errors.New("prefix would take up more space than buffer")
-	ErrNotFound = errors.New("blob no found")
+	ErrNotFound = errors.New("blob not found")
 )

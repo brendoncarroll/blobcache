@@ -21,7 +21,7 @@ func New() *Node {
 	return &Node{}
 }
 
-func PostNode(ctx context.Context, s blobs.Store, n *Node) (*blobs.ID, error) {
+func PostNode(ctx context.Context, s blobs.Poster, n *Node) (*blobs.ID, error) {
 	for {
 		data, err := proto.Marshal(n)
 		if err != nil {
@@ -41,7 +41,7 @@ func PostNode(ctx context.Context, s blobs.Store, n *Node) (*blobs.ID, error) {
 	}
 }
 
-func GetNode(ctx context.Context, s blobs.Store, id blobs.ID) (*Node, error) {
+func GetNode(ctx context.Context, s blobs.Getter, id blobs.ID) (*Node, error) {
 	n := &Node{}
 	if err := s.GetF(ctx, id, func(data []byte) error {
 		return proto.Unmarshal(data, n)
@@ -84,7 +84,7 @@ func Put(ctx context.Context, s blobs.Store, id blobs.ID, key, value []byte) (*b
 	return PostNode(ctx, s, n)
 }
 
-func Get(ctx context.Context, s blobs.Store, id blobs.ID, key []byte) ([]byte, error) {
+func Get(ctx context.Context, s blobs.Getter, id blobs.ID, key []byte) ([]byte, error) {
 	n, err := GetNode(ctx, s, id)
 	if err != nil {
 		return nil, err
@@ -159,7 +159,7 @@ func Delete(ctx context.Context, s blobs.Store, id blobs.ID, key []byte) (*blobs
 	return &id, nil
 }
 
-func Split(ctx context.Context, s blobs.Store, x *Node) (*Node, error) {
+func Split(ctx context.Context, s blobs.Poster, x *Node) (*Node, error) {
 	if len(x.Entries) < 2 {
 		return nil, ErrCannotSplit
 	}

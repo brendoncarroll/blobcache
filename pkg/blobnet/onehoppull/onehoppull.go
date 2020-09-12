@@ -42,7 +42,7 @@ func (ohp *OneHopPull) handleAsk(ctx context.Context, msg *p2p.Message, w io.Wri
 	id := blobs.ID{}
 	copy(id[:], msg.Payload)
 
-	if !ohp.isAllowed(ctx, id) {
+	if !ohp.isAllowed(ctx, msg.Src.(p2p.PeerID), id) {
 		return
 	}
 
@@ -65,7 +65,7 @@ func (ohp *OneHopPull) AddRule(peerID p2p.PeerID, f func(context.Context, blobs.
 	x := ohp.seq
 	ohp.seq++
 
-	ohp.rules[x] = func(ctx context.context, xpeer p2p.PeerID, xblob blobs.ID) bool {
+	ohp.rules[x] = func(ctx context.Context, xpeer p2p.PeerID, xblob blobs.ID) bool {
 		return xpeer.Equals(peerID) && f(ctx, xblob)
 	}
 	return x
@@ -86,4 +86,32 @@ func (ohp *OneHopPull) isAllowed(ctx context.Context, peerID p2p.PeerID, blobID 
 		}
 	}
 	return false
+}
+
+func (ohp *OneHopPull) Getter(peerID p2p.PeerID) blobs.Getter {
+	return &getter{peerID: peerID, ohp: ohp}
+}
+
+type getter struct {
+	peerID p2p.PeerID
+	ohp    *OneHopPull
+}
+
+func (g *getter) GetF(ctx context.Context, id blobs.ID, fn func(data []byte) error) error {
+	data, err := g.ohp.Pull(ctx, g.peerID, id)
+	if err != nil {
+		return err
+	}
+	return fn(data)
+}
+
+func (g *getter) Exists(ctx context.Context, id blobs.ID) (bool, error) {
+	err := g.GetF(ctx, id, func([]byte) error { return nil })
+	if err != nil {
+		if err == blobs.ErrNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }

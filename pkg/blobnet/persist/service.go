@@ -2,6 +2,7 @@ package persist
 
 import (
 	"context"
+	"sync"
 
 	"github.com/blobcache/blobcache/pkg/bcstate"
 	"github.com/blobcache/blobcache/pkg/blobnet/bcproto"
@@ -9,28 +10,46 @@ import (
 	"github.com/blobcache/blobcache/pkg/blobs"
 	"github.com/blobcache/blobcache/pkg/tries"
 	"github.com/brendoncarroll/go-p2p"
-	"golang.org/x/sync/errgroup"
 )
 
 type Params struct {
-	LocalSet   blobs.Set
-	LocalStore blobs.Store
-	LocalID    p2p.PeerID
-	DB         bcstate.DB
-	Swarm      p2p.Swarm
+	LocalSet                 blobs.Set
+	DataStore, MetadataStore blobs.Store
+	LocalID                  p2p.PeerID
+	DB                       bcstate.DB
+	Swarm                    p2p.Swarm
+	OneHopPull               *onehoppull.OneHopPull
 }
 
 type Service struct {
-	localSet   blobs.Set
-	localStore blobs.Store
-	puller     *onehoppull.OneHopPull
+	// what the local node wants to have persisted
+	localSet blobs.Set
 
+	dataStore     blobs.Store // where blobs are stored
+	metadataStore blobs.Store // where tries are stored (as blobs)
+	puller        *onehoppull.OneHopPull
+
+	placerLock     sync.Mutex
+	placer         *Placer
+	plan           *Plan
 	promisesFromUs bcstate.KV
 	promisesToUs   bcstate.KV
+	gcLock         sync.RWMutex
 }
 
 func NewService(params Params) *Service {
-	return &Service{}
+	return &Service{
+		localSet: params.LocalSet,
+
+		dataStore:     params.DataStore,
+		metadataStore: params.MetadataStore,
+
+		puller: params.OneHopPull,
+	}
+}
+
+func (s *Service) run(ctx context.Context) {
+	placer := &Placer{store: s.metadataStore}
 }
 
 func (s *Service) Persist(ctx context.Context, peerID p2p.PeerID) (bcproto.Promise, error) {
@@ -38,74 +57,31 @@ func (s *Service) Persist(ctx context.Context, peerID p2p.PeerID) (bcproto.Promi
 }
 
 func (s *Service) pullTrie(ctx context.Context, peerID p2p.PeerID, root blobs.ID) error {
-	data, err := s.puller.Pull(ctx, peerID, root)
-	if err != nil {
+	s.gcLock.RLock()
+	src := s.puller.Getter(peerID)
+	if err := tries.Sync(ctx, src, s.metadataStore, root); err != nil {
+		s.gcLock.Unlock()
 		return err
 	}
-	trie, err := tries.FromBytes(blobs.Void{}, data)
-	if err != nil {
-		return err
-	}
-	if trie.IsParent() {
-		for i := 0; i < 256; i++ {
-			childID := trie.GetChildRef(byte(i))
-			if childID.Equals(blobs.ID{}) {
-				continue
-			}
-			if err := pullTrie(ctx, peerID, childID); err != nil {
-				return err
-			}
-		}
-	} else {
-		group, ctx := errgroup.WithContext(ctx)
-		for _, pair := range trie.ListEntries() {
-			pair := pair
-			group.Go(func() error {
-				return s.pullBlob(ctx, peerID)
-			})
-		}
-		if err := group.Wait(); err != nil {
-			return err
-		}
-	}
-	_, err := s.localStore.Post(ctx, data)
-	return err
-}
-
-func (s *Service) pullBlob(ctx context.Context, peerID p2p.PeerID, blobID blobs.ID) error {
-	if exists, err := s.localStore.Exists(ctx, blobID); err != nil {
-		return err
-	}
-	if exists {
-		return nil
-	}
-	data, err := s.puller.Pull(ctx, peerID, blobID)
-	if err != nil {
-		return err
-	}
-	_, err := s.localStore.Post(ctx, data)
-	return err
-}
-
-func (s *Service) shouldKeep(ctx context.Context, blobID) (bool, error) {
-	exists, err := s.localSet.Exists(ctx, blobID)
-	if err != nil {
-		return false, err
-	}
-	if exists {
-		return true
-	}
+	ts := &TrieSet{store: s.metadataStore}
+	return blobs.ForEach(ctx, ts, func(id blobs.ID) error {
+		return blobs.Copy(ctx, src, s.dataStore, id)
+	})
+	return nil
 }
 
 func (s *Service) GC(ctx context.Context) error {
-	return blobs.ForEach(ctx, s.localStore, func(id blobs.ID) error {
-		yes, err := s.shouldKeep(ctx, id)
-		if err != nil {
-			return err
-		}
-		if !yes {
-			return s.localStore.Delete(ctx, id)
-		}
-		return nil
-	})
+	s.gcLock.Lock()
+	defer s.gcLock.Unlock()
+	var prefix []byte
+	trieRoots := []blobs.ID{} // TODO: populate this
+	// first GC the metadata store
+	if err := tries.GC(ctx, s.metadataStore, trieRoots); err != nil {
+		return err
+	}
+	union := Union{}
+	for _, root := range trieRoots {
+		union = append(union, &TrieSet{store: s.metadataStore, root: root})
+	}
+	return blobs.GC(ctx, s.dataStore, prefix, union.Exists)
 }
